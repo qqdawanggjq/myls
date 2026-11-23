@@ -1,4 +1,6 @@
 #include<stdio.h>
+#include<string.h>
+#include<stdlib.h>
 #include<dirent.h>
 #include<sys/stat.h>
 #include<fcntl.h>
@@ -15,6 +17,39 @@ typedef struct
     int show_inode;
     int show_blocks;
 }options;
+typedef struct 
+{
+    char* name;
+    struct stat st;
+}fileinfo;
+int cmp_name(const void * p1,const void * p2)
+{
+    const fileinfo * a=p1;
+    const fileinfo * b=p2;
+    return strcmp(a->name,b->name);
+}
+int cmp_time(const void * p1,const void * p2)
+{
+    const fileinfo * a=p1;
+    const fileinfo * b=p2;
+    if(a->st.st_atim.tv_sec>b->st.st_atim.tv_sec)
+    {
+        return -1;
+    }
+    if(a->st.st_atim.tv_sec<b->st.st_atim.tv_sec)
+    {
+        return 1;
+    }
+    if(a->st.st_atim.tv_nsec>b->st.st_atim.tv_nsec)
+    {
+        return -1;
+    }
+    if(a->st.st_atim.tv_nsec<b->st.st_atim.tv_nsec)
+    {
+        return 1;
+    }
+    return strcmp(a->name,b->name);
+}
 int list_ori(const char *s,options *opt)
 {
     DIR*dir=opendir(s);
@@ -24,6 +59,11 @@ int list_ori(const char *s,options *opt)
         return 1;
     }
     struct dirent* entry;
+    fileinfo* files=NULL;
+    size_t count=0;
+    size_t maxsave=0;
+    int failed=0;
+
     while((entry=readdir(dir))!=NULL)
     {
         if(!opt->show_all&&entry->d_name[0]=='.')
@@ -31,64 +71,125 @@ int list_ori(const char *s,options *opt)
             continue;
         }
         struct stat st;
-        if(opt->show_blocks||opt->long_format)
+        if((fstatat(dirfd(dir),entry->d_name,&st,AT_SYMLINK_NOFOLLOW))==-1)
         {
-            if((fstatat(dirfd(dir),entry->d_name,&st,AT_SYMLINK_FOLLOW))==-1)
+            perror(entry->d_name);
+            continue;
+        }
+        if(count==maxsave)
+        {
+            size_t newsize=((maxsave==0)?8:maxsave*2);
+            fileinfo* ppp=realloc(files,newsize*sizeof(*files));
+            if(ppp==NULL)
             {
-                perror(entry->d_name);
-                continue;
+                perror("realloc");
+                failed=1;
+                break;
             }
+            files=ppp;
+            maxsave=newsize;
+        }
+        files[count].name=malloc(strlen(entry->d_name)+1);
+        if(files[count].name==NULL)
+        {
+            perror("malloc");
+            failed=1;
+            break;
+        }
+        strcpy(files[count].name,entry->d_name);
+        files[count].st=st;
+        count++;
+    }
+    if(!failed&&count>1)
+    {
+        if(opt->sort_time)
+        {
+            qsort(files,count,sizeof(*files),cmp_time);
+        }
+        else
+        {
+            qsort(files,count,sizeof(*files),cmp_name);
+        }
+    }
+    if(!failed)
+    {
+        for(int i=0;i<count;i++)
+        {
+            int j=(opt->reverse ? count-1-i : i);
+            struct stat st=files[j].st;
+            const char * name=files[j].name;
             if(opt->show_blocks)
             {
-                printf("%lld ",((long long)st.st_blocks+1)/2);
+            printf("%lld ",((long long)st.st_blocks+1)/2);
             }
+            if(opt->show_inode)
+            {
+            printf("%lu ",(unsigned long)st.st_ino);
+            }
+            if(opt->long_format)
+            {
+                if(S_ISDIR(st.st_mode))printf("d");
+                else if(S_ISREG(st.st_mode))printf("-");
+                else if(S_ISLNK(st.st_mode))printf("l");
+                else printf("?");
+                printf("%c",(st.st_mode&S_IRUSR)?'r':'-');
+                printf("%c",(st.st_mode&S_IWUSR)?'w':'-');
+                printf("%c",(st.st_mode&S_IXUSR)?'x':'-');
+                printf("%c",(st.st_mode&S_IRGRP)?'r':'-');
+                printf("%c",(st.st_mode&S_IWGRP)?'w':'-');
+                printf("%c",(st.st_mode&S_IXGRP)?'x':'-');
+                printf("%c",(st.st_mode&S_IROTH)?'r':'-');
+                printf("%c",(st.st_mode&S_IWOTH)?'w':'-');
+                printf("%c",(st.st_mode&S_IXGRP)?'x':'-');
+                printf(" ");
+                printf("lu ",(unsigned long)st.st_nlink);
+                struct passwd *pw=getpwuid(st.st_uid);
+                struct group *gr=getgrgid(st.st_gid);
+                if(pw!=NULL)
+                {
+                    printf("%s ",pw->pw_name);
+                }
+                else
+                {
+                    printf("%u ",(unsigned int)st.st_uid);
+                }
+                if(gr!=NULL)
+                {
+                    printf("%s ",gr->gr_name);
+                }
+                else
+                {
+                    printf("%u ",(unsigned int)st.st_gid);
+                }
+                printf("%lld ",(long long)st.st_size);
+                char buf[64];
+                struct tm* t=localtime(&st.st_mtime);
+                if(t!=NULL)
+                {
+                    if(strftime(buf,sizeof(buf),"%b %e %H:%M",t)>0)
+                    {
+                        printf("%s ",buf);
+                    }
+                    else
+                    {
+                        printf("? ");
+                    }
+                }
+                else
+                {
+                    printf("? ");
+                }
+            }
+            printf("%s\n",name);
         }
-        if(opt->show_inode)
-        {
-            printf("%lu ",(unsigned long)entry->d_ino);
-        }
-        if(opt->long_format)
-        {
-            if(S_ISDIR(st.st_mode))printf("d");
-            else if(S_ISREG(st.st_mode))printf("-");
-            else if(S_ISLNK(st.st_mode))printf("l");
-            else printf("?");
-            printf("%c",(st.st_mode&S_IRUSR)?'r':'-');
-            printf("%c",(st.st_mode&S_IWUSR)?'w':'-');
-            printf("%c",(st.st_mode&S_IXUSR)?'x':'-');
-            printf("%c",(st.st_mode&S_IRGRP)?'r':'-');
-            printf("%c",(st.st_mode&S_IWGRP)?'w':'-');
-            printf("%c",(st.st_mode&S_IXGRP)?'x':'-');
-            printf("%c",(st.st_mode&S_IROTH)?'r':'-');
-            printf("%c",(st.st_mode&S_IWOTH)?'w':'-');
-            printf("%c",(st.st_mode&S_IXGRP)?'x':'-');
-            printf(" ");
-            printf("lu ",(unsigned long)st.st_nlink);
-            struct passwd *pw=getpwuid(st.st_uid);
-            struct group *gr=getgrgid(st.st_gid);
-            if(pw!=NULL)
-            {
-                printf("%s ",pw->pw_name);
-            }
-            else
-            {
-                printf("%u ",(unsigned int)st.st_uid);
-            }
-            if(gr!=NULL)
-            {
-                printf("%s ",gr->gr_name);
-            }
-            else
-            {
-                printf("%u ",(unsigned int)st.st_gid);
-            }
-            printf("%lld ",(long long)st.st_size);
-            
-        }
-        printf("%s\n",entry->d_name);
     }
+    for(int i=0;i<maxsave;i++)
+    {
+        free(files[i].name);
+    }
+    free(files);
     closedir(dir);
-    return 0;
+    return failed;
 }
 int main(int argc,char* argv[])
 {
