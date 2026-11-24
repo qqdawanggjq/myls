@@ -100,6 +100,11 @@ int list_ori(const char *s,options *opt)
         files[count].st=st;
         count++;
     }
+    if(closedir(dir)==-1)
+    {
+        perror(s);
+        failed=1;
+    }
     if(!failed&&count>1)
     {
         if(opt->sort_time)
@@ -113,6 +118,10 @@ int list_ori(const char *s,options *opt)
     }
     if(!failed)
     {
+        if(!failed&&opt->recursive)
+        {
+            printf("%s:\n",s);
+        }
         for(int i=0;i<count;i++)
         {
             int j=(opt->reverse ? count-1-i : i);
@@ -183,12 +192,38 @@ int list_ori(const char *s,options *opt)
             printf("%s\n",name);
         }
     }
+    if(!failed&&opt->recursive)
+    {
+        for(int i=0;i<count;i++)
+        {
+            int j=(opt->reverse? count-1-i : i);
+            const char * name=files[j].name;
+            if(!S_ISDIR(files[j].st.st_mode))
+            {
+                continue;
+            }
+            if((strcmp(name,"."))==0||(strcmp(name,".."))==0)
+            {
+                continue;
+            }
+            size_t len=strlen(s);
+            size_t n=strlen(name);
+            int xiegang=(s[len-1]!='/');
+            char * path=malloc(len+n+xiegang+1);
+            if(path==NULL)
+            {
+                perror("malloc");
+                failed=1;
+                break;
+            }
+            snprintf(path,len+n+xiegang+1,"%s%s%s",s,xiegang?"/":"",name);
+        }
+    }
     for(int i=0;i<maxsave;i++)
     {
         free(files[i].name);
     }
     free(files);
-    closedir(dir);
     return failed;
 }
 int main(int argc,char* argv[])
