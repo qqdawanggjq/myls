@@ -217,7 +217,12 @@ int list_ori(const char *s,options *opt)
                 break;
             }
             snprintf(path,len+n+xiegang+1,"%s%s%s",s,xiegang?"/":"",name);
-            
+            printf("\n");
+            if(list_ori(path,opt)!=0)
+            {
+                failed=1;
+            }
+            free(path);
         }
     }
     for(int i=0;i<maxsave;i++)
