@@ -217,6 +217,7 @@ int list_ori(const char *s,options *opt)
                 break;
             }
             snprintf(path,len+n+xiegang+1,"%s%s%s",s,xiegang?"/":"",name);
+            
         }
     }
     for(int i=0;i<maxsave;i++)
