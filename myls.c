@@ -32,19 +32,19 @@ int cmp_time(const void * p1,const void * p2)
 {
     const fileinfo * a=p1;
     const fileinfo * b=p2;
-    if(a->st.st_atim.tv_sec>b->st.st_atim.tv_sec)
+    if(a->st.st_mtim.tv_sec>b->st.st_mtim.tv_sec)
     {
         return -1;
     }
-    if(a->st.st_atim.tv_sec<b->st.st_atim.tv_sec)
+    if(a->st.st_mtim.tv_sec<b->st.st_mtim.tv_sec)
     {
         return 1;
     }
-    if(a->st.st_atim.tv_nsec>b->st.st_atim.tv_nsec)
+    if(a->st.st_mtim.tv_nsec>b->st.st_mtim.tv_nsec)
     {
         return -1;
     }
-    if(a->st.st_atim.tv_nsec<b->st.st_atim.tv_nsec)
+    if(a->st.st_mtim.tv_nsec<b->st.st_mtim.tv_nsec)
     {
         return 1;
     }
@@ -63,7 +63,7 @@ int list_ori(const char *s,options *opt)
     size_t count=0;
     size_t maxsave=0;
     int failed=0;
-
+    int errored=0;
     while((entry=readdir(dir))!=NULL)
     {
         if(!opt->show_all&&entry->d_name[0]=='.')
@@ -74,6 +74,7 @@ int list_ori(const char *s,options *opt)
         if((fstatat(dirfd(dir),entry->d_name,&st,AT_SYMLINK_NOFOLLOW))==-1)
         {
             perror(entry->d_name);
+            errored=1;
             continue;
         }
         if(count==maxsave)
@@ -122,9 +123,9 @@ int list_ori(const char *s,options *opt)
         {
             printf("%s:\n",s);
         }
-        for(int i=0;i<count;i++)
+        for(size_t i=0;i<count;i++)
         {
-            int j=(opt->reverse ? count-1-i : i);
+            size_t j=(opt->reverse ? count-1-i : i);
             struct stat st=files[j].st;
             const char * name=files[j].name;
             if(opt->show_blocks)
@@ -149,9 +150,9 @@ int list_ori(const char *s,options *opt)
                 printf("%c",(st.st_mode&S_IXGRP)?'x':'-');
                 printf("%c",(st.st_mode&S_IROTH)?'r':'-');
                 printf("%c",(st.st_mode&S_IWOTH)?'w':'-');
-                printf("%c",(st.st_mode&S_IXGRP)?'x':'-');
+                printf("%c",(st.st_mode&S_IXOTH)?'x':'-');
                 printf(" ");
-                printf("lu ",(unsigned long)st.st_nlink);
+                printf("%lu ",(unsigned long)st.st_nlink);
                 struct passwd *pw=getpwuid(st.st_uid);
                 struct group *gr=getgrgid(st.st_gid);
                 if(pw!=NULL)
@@ -194,9 +195,9 @@ int list_ori(const char *s,options *opt)
     }
     if(!failed&&opt->recursive)
     {
-        for(int i=0;i<count;i++)
+        for(size_t i=0;i<count;i++)
         {
-            int j=(opt->reverse? count-1-i : i);
+            size_t j=(opt->reverse? count-1-i : i);
             const char * name=files[j].name;
             if(!S_ISDIR(files[j].st.st_mode))
             {
@@ -225,12 +226,12 @@ int list_ori(const char *s,options *opt)
             free(path);
         }
     }
-    for(int i=0;i<maxsave;i++)
+    for(int i=0;i<count;i++)
     {
         free(files[i].name);
     }
     free(files);
-    return failed;
+    return failed||errored;
 }
 int main(int argc,char* argv[])
 {
