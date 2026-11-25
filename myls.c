@@ -160,9 +160,29 @@ int listori(const char *s,options *opt)
                 char link_buf[32];
                 snprintf(link_buf,sizeof(link_buf),"%lu",(unsigned long)files[i].st.st_nlink);
                 int len=strlen(link_buf);
-                if(len>link_width);
+                if(len>link_width)
                 {
                     link_width=len;
+                }
+            }
+        }
+        int user_width=1;
+        int group_width=1;
+        if(opt->long_format)
+        {
+            for(size_t i=0;i<count;i++)
+            {
+                struct passwd * pw=getpwuid(files[i].st.st_uid);
+                struct group * gr=getgrgid(files[i].st.st_gid);
+                int len1=pw ? strlen(pw->pw_name) : 1;
+                int len2=gr ? strlen(gr->gr_name) : 1;
+                if(len1>user_width)
+                {
+                    user_width=len1;
+                }
+                if(len2>group_width)
+                {
+                    group_width=len2;
                 }
             }
         }
@@ -195,26 +215,26 @@ int listori(const char *s,options *opt)
                 printf("%c",(st.st_mode&S_IWOTH)?'w':'-');
                 printf("%c",(st.st_mode&S_IXOTH)?'x':'-');
                 printf(" ");
-                printf("%lu ",(unsigned long)st.st_nlink);
+                printf("%*lu ",link_width,(unsigned long)st.st_nlink);
                 struct passwd *pw=getpwuid(st.st_uid);
                 struct group *gr=getgrgid(st.st_gid);
                 if(pw!=NULL)
                 {
-                    printf("%s ",pw->pw_name);
+                    printf("%-*s ",user_width,pw->pw_name);
                 }
                 else
                 {
-                    printf("%u ",(unsigned int)st.st_uid);
+                    printf("%-*u ",user_width,(unsigned int)st.st_uid);
                 }
                 if(gr!=NULL)
                 {
-                    printf("%s ",gr->gr_name);
+                    printf("%-*s ",group_width,gr->gr_name);
                 }
                 else
                 {
-                    printf("%u ",(unsigned int)st.st_gid);
+                    printf("%-*u ",group_width,(unsigned int)st.st_gid);
                 }
-                printf("%lld ",(long long)st.st_size);
+                printf("%*lld ",size_width,(long long)st.st_size);
                 char buf[64];
                 struct tm* t=localtime(&st.st_mtime);
                 if(t!=NULL)
@@ -233,7 +253,6 @@ int listori(const char *s,options *opt)
                     printf("? ");
                 }
             }
-            // printf("%s\n",name);
             if(color)
             {
                 if(S_ISDIR(st.st_mode))
