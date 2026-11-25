@@ -7,6 +7,9 @@
 #include<pwd.h>
 #include<grp.h>
 #include<time.h>
+#include<errno.h>
+#include<stdint.h>
+#include<unistd.h>
 typedef struct 
 {
     int show_all;
@@ -50,7 +53,7 @@ int cmp_time(const void * p1,const void * p2)
     }
     return strcmp(a->name,b->name);
 }
-int list_ori(const char *s,options *opt)
+int listori(const char *s,options *opt)
 {
     DIR*dir=opendir(s);
     if(dir==NULL)
@@ -64,8 +67,19 @@ int list_ori(const char *s,options *opt)
     size_t maxsave=0;
     int failed=0;
     int errored=0;
-    while((entry=readdir(dir))!=NULL)
+    for(;;)
     {
+        errno=0;
+        entry=readdir(dir);
+        if(entry==NULL)
+        {
+            if(errno!=0)
+            {
+                perror("readdir");
+                errored=1;
+            }
+            break;
+        }
         if(!opt->show_all&&entry->d_name[0]=='.')
         {
             continue;
@@ -122,6 +136,35 @@ int list_ori(const char *s,options *opt)
         if(!failed&&opt->recursive)
         {
             printf("%s:\n",s);
+        }
+        int color=isatty(STDOUT_FILENO);
+        int size_width=1;
+        if(opt->long_format)
+        {
+            for(size_t i=0;i<count;i++)
+            {
+                char size_buf[32];
+                snprintf(size_buf,sizeof(size_buf),"%lld",(long long)files[i].st.st_size);
+                int len=strlen(size_buf);
+                if(len>size_width)
+                {
+                    size_width=len;
+                }
+            }
+        }
+        int link_width=1;
+        if(opt->long_format)
+        {
+            for(size_t i=0;i<count;i++)
+            {
+                char link_buf[32];
+                snprintf(link_buf,sizeof(link_buf),"%lu",(unsigned long)files[i].st.st_nlink);
+                int len=strlen(link_buf);
+                if(len>link_width);
+                {
+                    link_width=len;
+                }
+            }
         }
         for(size_t i=0;i<count;i++)
         {
@@ -190,7 +233,28 @@ int list_ori(const char *s,options *opt)
                     printf("? ");
                 }
             }
-            printf("%s\n",name);
+            // printf("%s\n",name);
+            if(color)
+            {
+                if(S_ISDIR(st.st_mode))
+                {
+                    printf("\033[1;34m");
+                }
+                else if(S_ISLNK(st.st_mode))
+                {
+                    printf("\033[1;36m");
+                }
+                else if(st.st_mode&(S_IXUSR|S_IXGRP|S_IXOTH))
+                {
+                    printf("\033[1;32m");
+                }
+            }
+            printf("%s",name);
+            if(color)
+            {
+                printf("\033[0m");
+            }
+            printf("\n");
         }
     }
     if(!failed&&opt->recursive)
@@ -209,24 +273,30 @@ int list_ori(const char *s,options *opt)
             }
             size_t len=strlen(s);
             size_t n=strlen(name);
-            int xiegang=(s[len-1]!='/');
-            char * path=malloc(len+n+xiegang+1);
+            size_t slash=(s[len-1]!='/');
+            if(n>SIZE_MAX-slash-1||len>SIZE_MAX-slash-n-1)
+            {
+                fprintf(stderr,"path too long\n");
+                failed=1;
+                break;
+            }
+            char * path=malloc(len+n+slash+1);
             if(path==NULL)
             {
                 perror("malloc");
                 failed=1;
                 break;
             }
-            snprintf(path,len+n+xiegang+1,"%s%s%s",s,xiegang?"/":"",name);
+            snprintf(path,len+n+slash+1,"%s%s%s",s,slash?"/":"",name);
             printf("\n");
-            if(list_ori(path,opt)!=0)
+            if(listori(path,opt)!=0)
             {
                 failed=1;
             }
             free(path);
         }
     }
-    for(int i=0;i<count;i++)
+    for(size_t i=0;i<count;i++)
     {
         free(files[i].name);
     }
@@ -276,5 +346,5 @@ int main(int argc,char* argv[])
             }
         }
     }
-    return list_ori(path,&opt);
+    return listori(path,&opt);
 }
