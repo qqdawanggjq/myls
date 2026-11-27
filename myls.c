@@ -137,6 +137,15 @@ int listori(const char *s,options *opt)
         {
             printf("%s:\n",s);
         }
+        if(opt->long_format||opt->show_blocks)
+        {
+            long long total=0;
+            for(size_t i=0;i<count;i++)
+            {
+                total+=files[i].st.st_blocks;
+            }
+            printf("total %lld\n",(total+1)/2);
+        }
         int color=isatty(STDOUT_FILENO);
         int size_width=1;
         if(opt->long_format)
@@ -186,6 +195,32 @@ int listori(const char *s,options *opt)
                 }
             }
         }
+        int inode_width=1;
+        int block_width=1;
+        for(size_t i=0;i<count;i++)
+        {
+            char inode_buf[32];
+            char blocks_buf[32];
+            if(opt->show_inode)
+            {
+                snprintf(inode_buf,sizeof(inode_buf),"%lu",(unsigned long)files[i].st.st_ino);
+                int len=strlen(inode_buf);
+                if(len>inode_width)
+                {
+                    inode_width=len;
+                }
+            }
+            if(opt->show_blocks)
+            {
+                snprintf(blocks_buf,sizeof(blocks_buf),"%lld",((long long)files[i].st.st_blocks+1)/2);
+                int len=strlen(blocks_buf);
+                if(len>block_width)
+                {
+                    block_width=len;
+                }
+            }
+        
+        }
         for(size_t i=0;i<count;i++)
         {
             size_t j=(opt->reverse ? count-1-i : i);
@@ -193,11 +228,11 @@ int listori(const char *s,options *opt)
             const char * name=files[j].name;
             if(opt->show_blocks)
             {
-            printf("%lld ",((long long)st.st_blocks+1)/2);
+            printf("%*lld ",block_width,((long long)st.st_blocks+1)/2);
             }
             if(opt->show_inode)
             {
-            printf("%lu ",(unsigned long)st.st_ino);
+            printf("%*lu ",inode_width,(unsigned long)st.st_ino);
             }
             if(opt->long_format)
             {
