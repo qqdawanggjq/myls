@@ -183,8 +183,27 @@ int listori(const char *s,options *opt)
             {
                 struct passwd * pw=getpwuid(files[i].st.st_uid);
                 struct group * gr=getgrgid(files[i].st.st_gid);
-                int len1=pw ? strlen(pw->pw_name) : 1;
-                int len2=gr ? strlen(gr->gr_name) : 1;
+                int len1;
+                int len2;
+                char id_buf[32];
+                if(pw!=NULL)
+                {
+                    len1=strlen(files[i].name);
+                }
+                else
+                {
+                    snprintf(id_buf,sizeof(id_buf),"%lld",(long long)files[i].st.st_uid);
+                    len1=strlen(id_buf);
+                }
+                if(gr!=NULL)
+                {
+                    len2=strlen(files[i].name);
+                }
+                else
+                {
+                    snprintf(id_buf,sizeof(id_buf),"%lld",(long long)files[i].st.st_gid);
+                    len2=strlen(id_buf);
+                }
                 if(len1>user_width)
                 {
                     user_width=len1;
