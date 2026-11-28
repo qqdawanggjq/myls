@@ -290,7 +290,7 @@ int listori(const char *s,options *opt)
                 }
                 printf("%*lld ",size_width,(long long)st.st_size);
                 char buf[64];
-                struct tm* t=localtime(&st.st_mtime);
+                struct tm * t=localtime(&st.st_mtime);
                 if(t!=NULL)
                 {
                     if(strftime(buf,sizeof(buf),"%b %e %H:%M",t)>0)
